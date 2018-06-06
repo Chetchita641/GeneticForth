@@ -1,302 +1,226 @@
 /////////////////////////////////////////////////////////////////////////////
 // genetic.cpp
-// vim = ts=8 sts=8 sw=4 noet
+// vim = ts=8 sts=4 sw=4 noet
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <cstdlib>
 #include <ctime>
+#include <cstdlib>
 #include <string.h>
-#include <iostream>
-#include <sstream>
+
+#define METHOD_NUMBER 16
+#define METHOD_LENGTH 10
+#define METHOD_COUNT 6
+#define CO_RANGE 100
 
 using namespace std;
 
-const int mLen = 10;
-const int randRange = 100;
-const int numMethods = 10;
-const int iterations = 500;
+struct Method
+{
+    char op[METHOD_LENGTH+1];
+    int co[METHOD_LENGTH+1];
+};
 
-void InitMethods();
-int Calculate(char* method, int a, int b);
-string ForthTranslation(char* method, int a, int b);
-float ValidSet(char* method, int result);
-int RandomChoice(float sigmoids[10]);
-void MakeChild(int father, int mother);
-
-char methods[numMethods][mLen + 1];
-char newMethods[numMethods][mLen + 1];
-static int Coefficients[mLen];
-int aPlace = -1;
-int bPlace = -1;
-
-const bool forthTranslation = false;
+//Virtual Functions
+Method* InitMethods();
+char GetOperation();
+int GetCoefficient();
+int Calculate(Method method, int &a, int &b);
+float Validate(Method method, int result);
+Method* NextGeneration(Method* oldMethods, float* pSigmoids);
+int ParentChoice(float* pSigmoids);
 
 int main(int argc, char** argv)
 {
-	bool debug = false;
-	int i;
+    int i;
+    srand(time(NULL));
 
-	int a;
-	int b;
-	int result;
-	float accuracy[numMethods];
-	float accuracyTotal;
-	float sigmoids[numMethods];
-	int father;
-	int mother;
-	
-	InitMethods();
-	while (a != -1)
+    int a;
+    int b;
+    int maxIterations;
+    int result;
+    float differences[METHOD_NUMBER];
+    float differenceTotal;
+    float sigmoids[METHOD_NUMBER];
+    float* pSigmoids = sigmoids;
+
+    Method* methods = InitMethods();
+    Method* oldMethods = methods;
+    
+    printf ("Please enter the number of iterations: ");
+    scanf ("%i", &maxIterations);
+    printf ("Please enter in a value for a: ");
+    scanf ("%i", &a);
+    printf ("Please enter in a value for b: ");
+    scanf ("%i", &b);
+    printf ("Method key:\n"
+	    "a) Add\n" 
+	    "b) Subtract\n" 
+	    "c) Multiply\n" 
+	    "d) Divide\n" 
+	    "e) Modulo\n" 
+	    "f) Halt\n");
+
+    for (int iterations = 0; iterations < maxIterations; ++iterations)
+    {
+	differenceTotal = 0;
+	for (i = 0; i < METHOD_NUMBER; ++i)
 	{
-		// Set seed for random number generator
-		srand( rand() ^ time(NULL) );
-
-		
-		printf ("Please enter a value for a: ");
-		scanf ("%d", &a);
-		if (a == -1)
-			break;
-
-		printf ("Please enter a value for b: ");
-		scanf ("%d", &b);
-
-		printf ("Method key:\n"
-			"a) Add\n"
-			"b) Subtract\n"
-			"c) Multiply\n"
-			"d) Divide\n"
-			"e) Modulo\n"
-			"f) Swap\n"
-			"g) Duplicate\n"
-			"h) Over\n" 
-			"i) Rotate\n");
-
-		for (int iter = 0; iter < iterations; ++iter)
-		{
-			accuracyTotal = 0.0;
-			for (i = 0; i < numMethods; ++i)
-			{
-				// Draw from generated methods (sequence of operations)
-				if (debug) printf("Method[%d]: %s\n", i, methods[i]);
-				aPlace = -1;
-				bPlace = -1;
-				result = Calculate(methods[i], a, b);
-			
-				if (forthTranslation) 
-				{
-				  string trans = ForthTranslation(methods[i], a, b);
-				  cout << trans;
-				}
-
-				// Determine their accuracy compared to validation set
-				accuracy[i] = ValidSet(methods[i], result);
-				accuracyTotal += accuracy[i];
-			}
-			if (debug) printf("\n");
-			
-			// Convert methods into sigmoids
-			for (i = 0; i < numMethods; ++i)
-			{
-				sigmoids[i] = accuracy[i] / accuracyTotal;
-				if (debug) printf("Sigmoids[%d]: %f\n", i, sigmoids[i]);
-			}
-
-			// Create ten children randomly using the weights
-			for (i = 0; i < numMethods; ++i)
-			{
-				father = RandomChoice(sigmoids);
-				mother = RandomChoice(sigmoids);
-				MakeChild(father, mother);
-			}
-			if (debug) printf ("\n");
-			
-		}
+	    printf ("\nMethod #%i: %s\n", i, methods[i].op);
+	    result = Calculate(methods[i], a, b);
+	    printf ("Result: %i\n", result);
+	    differences[i] = Validate(methods[i], result);
+	    printf ("Total Accuracy from validation set: %f\n", differences[i]);
+	    differenceTotal += differences[i];
 	}
-	return 0;
-}
 
-void InitMethods()
-{
-	int r;
-	char method[mLen+1];
-
-	for (int i = 0; i < numMethods; ++i)
+	printf ("\n");
+	for (i = 0; i < METHOD_NUMBER; ++i)
 	{
-		for (int j = 0; j < mLen; ++j)
-		{
-			r = rand() % 6;
-			methods[i][j] = 'a' + r;
-		}
-	}	
+	    sigmoids[i] = differences[i] / differenceTotal;
+	    printf ("Sigmoid #%i: %f\n", i, sigmoids[i]);	
+	}
+
+	printf ("\n");
+	oldMethods = methods;
+	methods = NextGeneration(oldMethods, pSigmoids);
+	delete oldMethods;
+    }
+
+    return 0;
 }
 
-int Calculate(char* method, int a, int b)
+Method* InitMethods()
 {
-	bool debug = false;
+    int aPlace;
+    int bPlace;
+    int currentMethodLength;
+    while (bPlace == aPlace)
+	bPlace = rand() % METHOD_NUMBER;
 
-	int result = 0;
-	int prev;
-	int coEff;
+    Method* methods = new Method[METHOD_NUMBER];
+    for (int i = 0; i < METHOD_NUMBER; ++i)
+    {
+	methods[i].op[0] = '-';
+	methods[i].co[0] = GetCoefficient();
 
-	int len = (int) strlen(method);
-	
-	if (aPlace == -1)
-	  aPlace = rand() % len;
-	if (bPlace == -1)
-	  bPlace = aPlace;
+	for (int j = 1; j < METHOD_LENGTH; ++j)
+	{
+	    methods[i].op[j] = GetOperation();
+	    methods[i].co[j] = GetCoefficient();
+	}
+
+	aPlace = rand() % METHOD_LENGTH;
+	bPlace = aPlace;
 	while (bPlace == aPlace)
-	{
-		bPlace = rand() % len;
-	}
+	    bPlace = rand() % METHOD_LENGTH;
 
-	if (aPlace == 0)
-		result = a;
-	else if (bPlace == 0)
-		result = b;
-	else 
-		result = rand () % randRange;
-	for (int i = 1; i < len; ++i)
-	{
-		if (i == aPlace) {
-			coEff = a;
-		} else if (i == bPlace) {
-			coEff = b;
-		} else {
-			coEff = rand() % randRange;
-		}
+	methods[i].co[aPlace] = CO_RANGE + 1;
+	methods[i].co[bPlace] = CO_RANGE + 2;
+    }
 
-		if (method[i-1] == 'a') {
-			prev = result;	
-			result += coEff;
-			Coefficients[i-1] = coEff;
-			if (debug) printf ("%d + %d = %d\n", prev, coEff, result);
-		}
-		else if (method[i-1] == 'b') {
-			prev = result;	
-			result -= coEff;
-			Coefficients[i-1] = coEff;
-			if (debug) printf ("%d - %d = %d\n", prev, coEff, result);
-		}
-		else if (method[i-1] == 'c') {
-			prev = result;	
-			result *= coEff;
-			Coefficients[i-1] = coEff;
-			if (debug) printf ("%d * %d = %d\n", prev, coEff, result);
-		}
-		else if (method[i-1] == 'd') {
-			if (coEff == 0)
-			{
-				printf ("Cannot divide by zero\n");
-				continue;
-			}	
-			prev = result;	
-			result /= coEff;
-			Coefficients[i-1] = coEff;
-			if (debug) printf ("%d / %d = %d\n", prev, coEff, result);
-		}
-		else if (method[i-1] == 'e') {
-			if (coEff == 0)
-			{
-				printf ("Cannot divide by zero\n");
-				continue;
-			}	
-			prev = result;	
-			result %= coEff;
-			Coefficients[i-1] = coEff;
-			if (debug) printf ("%d %% %d = %d\n", prev, coEff, result);
-		}
-		else if (method[i-1] == 'f')
-		{
-			if (i == 0)
-				printf ("%d", result);
-			break;
-		}
-	}
-	return result;
+    return methods;
 }
 
-string ForthTranslation(char* method, int a, int b)
+char GetOperation()
 {
-	stringstream sstm;
-	sstm << "sf " << a << " ";
-	int len = (int) strlen(method);
-	for (int i = 0; i < len; ++i)
-	{
-		if (method[i] == 'a')  sstm << Coefficients[i] << " + "; 
-		else if (method[i] == 'b')  sstm << Coefficients[i] << " - ";
-		else if (method[i] == 'c')  sstm << Coefficients[i] << " * ";
-		else if (method[i] == 'd')  sstm << Coefficients[i] << " / ";
-		else if (method[i] == 'e')  sstm << Coefficients[i] << " /MOD ";
-	}
-
-	sstm << ". bye\n";
-	string tmp = sstm.str();
-	return tmp.c_str();
+    int r = rand() % METHOD_COUNT;
+    if (r == METHOD_COUNT - 1)
+	return '-';
+    else
+	return r + 'a';
 }
 
-//Tests for y = a * 10 + b
-float ValidSet(char* method, int result)
+int GetCoefficient()
+{ return rand() % CO_RANGE; }
+
+int Calculate(Method method, int &a, int &b)
 {
-	bool debug = true;
+    int result = method.co[0];
+    int prev;
+    int c;
 
-	int testA[10] = { 5, 13, 8, 33, 7, 3, 82, 4, 37, 0 };
-	int testB[10] = { 10, -2, 8, 2, 42, -8, -40, -18, 0, 0 };
-	int testY[10] = { 60, 128, 88, 332, 112, 22, 780, 22, 370, 0 };
+    for (int i = 1; i < METHOD_LENGTH; ++i)
+    {
+	c = method.co[i];
+	if (c == CO_RANGE + 1)
+	    c = a;
+	else if (c == CO_RANGE + 2)
+	    c = b;
 
-	int testResult;
-	int resultTotal = 0;
-	float averageError;
-	int difference;
-	for (int i = 0; i < 10; ++i)
-	{
-		testResult = Calculate(method, testA[i], testB[i]);
-		difference = abs(testResult - testY[i]);
-		resultTotal += difference;
-		if (debug) printf ("Difference from Test Set %i: %i\n", i, difference);
-	}
-	averageError = (float) resultTotal / 10.0;
-	if (debug) printf ("Method: %s\n", method);
-	if (debug) printf ("Average error: %f\n\n", averageError);
-	return 1 / averageError;
+	if (method.op[i] == 'a')
+	    result += c;
+	else if (method.op[i] == 'b')
+	    result -= c;
+	else if (method.op[i] == 'c')
+	    result *= c;
+	else if (method.op[i] == 'd' && c != 0)
+	    result /= c;
+	else if (method.op[i] == 'e' && c != 0)
+	    result %= c;
+		    
+    }
+    
+    return result;
 }
 
-int RandomChoice(float sigmoids[10])
+float Validate(Method method, int result)
 {
-	bool debug = false;
-	int r;
-	float thresh = 1.0;
-	while (thresh > 0.0)
-	{
-		r = rand() % numMethods;
-		if (debug) printf ("Index: %d\n", r);
-		if (thresh < sigmoids[r])
-		{
-			if (debug) printf ("\nReturning %d\n", r);
-			return r;
-		}
-		thresh -= sigmoids[r];
-	}
+    int validA[10] = { 5, 13, 8, 33, 7, 3, 82, 4, 37, 0 };
+    int validB[10] = { 10, -2, 8, 2, 42, -8, -40, -18, 0, 0 };
+    int validY[10] = { 60, 128, 88, 332, 112, 22, 780, 22, 370, 0 };
+    
+    float difference = 0.0;
+    for (int i = 0; i < 10; ++i)
+    {
+	difference += (float) abs(Calculate(method, validA[i], validB[i]) - validY[i]);
+    }
 
-	return -1;
+    
+    return 1 / difference;
 }
 
-void MakeChild(int father, int mother)
+Method* NextGeneration(Method* oldMethods, float* pSigmoids)
 {
-	int i;
-	int j;
-	int median = mLen / 2;
+    int i;
+    int w;
+    int father;
+    int mother;
 
-	for (i = 0; i < numMethods; ++i)
+    Method* newMethods = new Method[METHOD_NUMBER];
+
+    for (i = 0; i < METHOD_NUMBER; ++i)
+    {
+	father = ParentChoice(pSigmoids);
+	mother = ParentChoice(pSigmoids);
+
+	w = 0;
+	while (w < METHOD_LENGTH/2)
 	{
-		for (j = 0; j < median-1; ++j)
-		{
-			methods[i][j] = methods[father][j]; 	
-		}
-		for (i = median; i < mLen; ++i)
-		{
-			methods[i][j] = methods[mother][j];
-		}
+	    newMethods[i].op[w] = oldMethods[father].op[w];
+	    newMethods[i].co[w] = oldMethods[father].co[w];
+	    ++w;
 	}
+	while (w < METHOD_LENGTH)
+	{
+	    newMethods[i].op[w] = oldMethods[mother].op[w];
+	    newMethods[i].co[w] = oldMethods[mother].co[w];
+	    ++w;
+	}
+    }
+
+    return newMethods;
 }
 
+int ParentChoice(float* pSigmoids)
+{
+    int r;
+    float thresh = 1.0;
+    while (thresh > 0)
+    {
+	r = rand() % METHOD_NUMBER;
+	if (thresh < pSigmoids[r])
+	    return r;
+	thresh -= pSigmoids[r];
+    }
+    return -1;
+}
