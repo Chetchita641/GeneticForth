@@ -12,6 +12,7 @@
 #define METHOD_LENGTH 10
 #define METHOD_COUNT 6
 #define CO_RANGE 100
+#define MUTATION_COUNT 2
 
 using namespace std;
 
@@ -30,6 +31,7 @@ float Validate(Method method, int result);
 void ShowBest(Method method, float &maxAccuracy, int &a, int &b);
 Method* NextGeneration(Method* oldMethods, float* pSigmoids);
 int ParentChoice(float* pSigmoids);
+void Mutate(Method &method, float sigmoid);
 
 int main(int argc, char** argv)
 {
@@ -261,6 +263,8 @@ Method* NextGeneration(Method* oldMethods, float* pSigmoids)
 	    newMethods[i].co[w] = oldMethods[mother].co[w];
 	    ++w;
 	}
+
+	Mutate(newMethods[i], pSigmoids[i]);
     }
 
     return newMethods;
@@ -278,4 +282,24 @@ int ParentChoice(float* pSigmoids)
 	thresh -= pSigmoids[r];
     }
     return -1;
+}
+
+void Mutate(Method &method, float sigmoid)
+{
+    int r;
+    char op;
+    int co;
+
+    for (int i = 0; i < MUTATION_COUNT; ++i)
+    {
+	r = rand() % METHOD_LENGTH;
+	op = method.op[r];
+	while (method.op[r] == op)
+	    method.op[r] = rand() % METHOD_COUNT + 'a';
+
+	co = method.co[r];
+	while (co == method.co[r])
+	    method.co[r] = rand() % CO_RANGE;
+    }
+    return;
 }
